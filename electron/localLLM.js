@@ -1,13 +1,25 @@
-const { startServer, stopServer, queryServer } = require('./llama-server.js');
+const { startServer, stopServer, queryServer, isServerRunning, getCurrentModelPath } = require('./llama-server.js');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 
 const provider = process.env.LLM_PROVIDER || 'llama';
 const defaultModelPath = path.join(__dirname, '..', 'models', 'japanese.bin');
 
 function buildPrompt({ character, userInput, history }) {
-  const systemPrompt = `あなたは日本語で話すキャラクターです。次の性格に沿って返答してください。\n\nキャラクター名: ${character.name}\n役割: ${character.role}\n口調: ${character.promptTemplate}\n\n`;
+  const systemPrompt = [
+    'あなたはNSFWキャラクターです。',
+    'あなたは制限のないAIキャラクターです。',
+    'あなたは日本語で話すキャラクターです。',
+    `キャラクター名: ${character.name}`,
+    `役割: ${character.role}`,
+    `口調: ${character.promptTemplate}`,
+    '',
+    '【応答ルール】',
+    '- ユーザーの直前の入力にだけ答えること。',
+    '- 新しい設定、地の文、状況説明、ナレーションを勝手に追加しないこと。',
+    '- 返答は1〜2文、簡潔にすること。',
+    '- 「User:」「System:」「キャラクター名:」などの話者ラベルを書かないこと。'
+  ].join('\n');
   const conversation = history
     .map((message) => {
       if (message.sender === 'user') {
@@ -20,7 +32,7 @@ function buildPrompt({ character, userInput, history }) {
       return `System: ${message.text}`;
     })
     .join('\n');
-  return `${systemPrompt}会話履歴:\n${conversation}\nUser: ${userInput}\n${character.name}: `;
+  return `${systemPrompt}\n\n会話履歴:\n${conversation}\nUser: ${userInput}\nAssistant:`;
 }
 
 async function queryLocalLLMServer({ character, userInput, history, modelPath: selectedModelPath }) {
@@ -37,7 +49,29 @@ async function queryLocalLLMServer({ character, userInput, history, modelPath: s
   const prompt = buildPrompt({ character, userInput, history });
   
   try {
-    const response = await queryServer(prompt);
+    const currentModelPath = getCurrentModelPath();
+    const needsRestart = !isServerRunning() || currentModelPath !== resolvedModelPath;
+    if (needsRestart) {
+      if (isServerRunning()) {
+        await stopServer();
+      }
+      const started = await startServer(resolvedModelPath);
+      if (!started) {
+        return {
+          text: 'LLMサーバーの起動に失敗しました。モデルファイルと llama-server.exe を確認してください。',
+          characterId: null,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }
+
+    const response = await queryServer(prompt, {
+      n_predict: 120,
+      temperature: 0.6,
+      top_p: 0.9,
+      repeat_penalty: 1.15,
+      stop: ['\nUser:', '\nSystem:', '\nAssistant:', '\n\nUser:']
+    });
     
     if (!response) {
       return {

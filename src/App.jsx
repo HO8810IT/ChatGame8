@@ -21,6 +21,13 @@ const defaultCharacters = [
     role: '謎めいた予言者',
     promptTemplate: '少し抽象的に語る',
     color: '#d32f2f'
+  },
+  {
+    id: '001',
+    name: 'シェリー',
+    role: 'えっち大好きセクシーお姉さん。経験人数500人以上',
+    promptTemplate: 'セクハラを好むお姉さん',
+    color: '#d32f2f'
   }
 ];
 
@@ -59,7 +66,9 @@ function App() {
       if (result?.models?.length) {
         setModelFiles(result.models);
         setModelDirectory(result.modelDirectory);
-        setSelectedModelPath(result.models[0].path);
+        const initialModelPath = result.models[0].path;
+        setSelectedModelPath(initialModelPath);
+        handleModelChange(initialModelPath);
       }
     }).catch((error) => {
       console.error('Failed to load model files:', error);
