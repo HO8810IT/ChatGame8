@@ -1,56 +1,11 @@
 import { useEffect, useState } from 'react';
-
-const defaultCharacters = [
-  {
-    id: 'hero',
-    name: 'アリア',
-    role: '主人公の親友',
-    promptTemplate: '明るく前向きに話す',
-    color: '#7c4dff'
-  },
-  {
-    id: 'mentor',
-    name: 'セリス',
-    role: '案内役',
-    promptTemplate: '落ち着いて丁寧に説明する',
-    color: '#0288d1'
-  },
-  {
-    id: 'mystic',
-    name: 'ルーク',
-    role: '謎めいた予言者',
-    promptTemplate: '少し抽象的に語る',
-    color: '#d32f2f'
-  },
-  {
-    id: '001',
-    name: 'シェリー',
-    role: 'えっち大好きセクシーお姉さん。経験人数500人以上',
-    promptTemplate: 'セクハラを好むお姉さん',
-    color: '#d32f2f'
-  }
-];
-
-const initialScenes = [
-  {
-    id: 'scene-1',
-    title: 'はじまりの街',
-    description: 'ユーザーは3人のキャラクターと出会い、冒険の種をまく。',
-    activeCharacterId: 'hero',
-    messages: [
-      {
-        id: 'm0',
-        sender: 'system',
-        text: 'シーン「はじまりの街」が開始されました。キャラクターを選んで会話を始めてください。'
-      }
-    ]
-  }
-];
+import defaultCharacters from '../characters/defaultCharacters';
+import defaultScenes from '../scenes/defaultScenes';
 
 function App() {
-  const [scenes, setScenes] = useState(initialScenes);
-  const [characters] = useState(defaultCharacters);
-  const [selectedSceneId, setSelectedSceneId] = useState('scene-1');
+  const [scenes, setScenes] = useState([]);
+  const [characters, setCharacters] = useState([]);
+  const [selectedSceneId, setSelectedSceneId] = useState('');
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [modelFiles, setModelFiles] = useState([]);
@@ -60,6 +15,12 @@ function App() {
 
   const scene = scenes.find((item) => item.id === selectedSceneId);
   const activeCharacter = characters.find((ch) => ch.id === scene?.activeCharacterId);
+
+  useEffect(() => {
+    setCharacters(defaultCharacters);
+    setScenes(defaultScenes);
+    setSelectedSceneId(defaultScenes[0]?.id || '');
+  }, []);
 
   useEffect(() => {
     window.electron.invoke('list-models').then((result) => {
