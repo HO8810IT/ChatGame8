@@ -50,8 +50,10 @@ function waitForDevServer(url, timeoutMs = 15000) {
 
 async function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 820,
+    width: 1680,
+    height: 960,
+    minWidth: 1420,
+    minHeight: 820,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
