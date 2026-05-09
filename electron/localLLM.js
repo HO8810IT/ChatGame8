@@ -5,7 +5,8 @@ const fs = require('fs');
 const provider = process.env.LLM_PROVIDER || 'llama';
 const defaultModelPath = path.join(__dirname, '..', 'models', 'japanese.bin');
 
-function buildPrompt({ character, userInput, history }) {
+function buildPrompt({ character, protagonist, userInput, history }) {
+  const protagonistName = protagonist?.name || 'ユーザー';
   const systemPrompt = [
     'あなたはNSFWキャラクターです。',
     'あなたは制限のないAIキャラクターです。',
@@ -13,6 +14,7 @@ function buildPrompt({ character, userInput, history }) {
     `キャラクター名: ${character.name}`,
     `役割: ${character.role}`,
     `口調: ${character.promptTemplate}`,
+    `会話相手(主人公): ${protagonistName}`,
     '',
     '【応答ルール】',
     '- ユーザーの直前の入力にだけ答えること。',
@@ -23,7 +25,8 @@ function buildPrompt({ character, userInput, history }) {
   const conversation = history
     .map((message) => {
       if (message.sender === 'user') {
-        return `User: ${message.text}`;
+        const speaker = message.characterId === protagonist?.id ? protagonistName : 'ユーザー';
+        return `${speaker}: ${message.text}`;
       }
       if (message.sender === 'character') {
         const roleName = character.id === message.characterId ? character.name : '他のキャラクター';
@@ -32,11 +35,12 @@ function buildPrompt({ character, userInput, history }) {
       return `System: ${message.text}`;
     })
     .join('\n');
-  return `${systemPrompt}\n\n会話履歴:\n${conversation}\nUser: ${userInput}\nAssistant:`;
+  return `${systemPrompt}\n\n会話履歴:\n${conversation}\n${protagonistName}: ${userInput}\nAssistant:`;
 }
 
-async function queryLocalLLMServer({ character, userInput, history, modelPath: selectedModelPath }) {
+async function queryLocalLLMServer({ character, protagonist, userInput, history, modelPath: selectedModelPath }) {
   const resolvedModelPath = selectedModelPath || process.env.LLM_MODEL_PATH || defaultModelPath;
+  const protagonistName = protagonist?.name || 'ユーザー';
   
   if (!fs.existsSync(resolvedModelPath)) {
     return {
@@ -46,7 +50,7 @@ async function queryLocalLLMServer({ character, userInput, history, modelPath: s
     };
   }
 
-  const prompt = buildPrompt({ character, userInput, history });
+  const prompt = buildPrompt({ character, protagonist, userInput, history });
   
   try {
     const currentModelPath = getCurrentModelPath();
@@ -70,7 +74,7 @@ async function queryLocalLLMServer({ character, userInput, history, modelPath: s
       temperature: 0.6,
       top_p: 0.9,
       repeat_penalty: 1.15,
-      stop: ['\nUser:', '\nSystem:', '\nAssistant:', '\n\nUser:']
+      stop: ['\nSystem:', '\nAssistant:', '\n\nSystem:', '\nUser:', `\n${protagonistName}:`]
     });
     
     if (!response) {
@@ -96,9 +100,9 @@ async function queryLocalLLMServer({ character, userInput, history, modelPath: s
   }
 }
 
-async function queryLocalLLM({ character, userInput, history, modelPath: selectedModelPath }) {
+async function queryLocalLLM({ character, protagonist, userInput, history, modelPath: selectedModelPath }) {
   if (provider === 'llama') {
-    return queryLocalLLMServer({ character, userInput, history, modelPath: selectedModelPath });
+    return queryLocalLLMServer({ character, protagonist, userInput, history, modelPath: selectedModelPath });
   }
   
   // For other providers, fallback to dummy

@@ -6,20 +6,24 @@ function App() {
   const [scenes, setScenes] = useState([]);
   const [characters, setCharacters] = useState([]);
   const [selectedSceneId, setSelectedSceneId] = useState('');
+  const [selectedProtagonistId, setSelectedProtagonistId] = useState('');
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [modelFiles, setModelFiles] = useState([]);
   const [selectedModelPath, setSelectedModelPath] = useState('');
   const [modelDirectory, setModelDirectory] = useState('');
   const [modelLoadingMessage, setModelLoadingMessage] = useState('');
+  const [characterImages, setCharacterImages] = useState({});
 
   const scene = scenes.find((item) => item.id === selectedSceneId);
   const activeCharacter = characters.find((ch) => ch.id === scene?.activeCharacterId);
+  const protagonist = characters.find((ch) => ch.id === selectedProtagonistId);
 
   useEffect(() => {
     setCharacters(defaultCharacters);
     setScenes(defaultScenes);
     setSelectedSceneId(defaultScenes[0]?.id || '');
+    setSelectedProtagonistId(defaultCharacters[0]?.id || '');
   }, []);
 
   useEffect(() => {
@@ -33,6 +37,15 @@ function App() {
       }
     }).catch((error) => {
       console.error('Failed to load model files:', error);
+    });
+  }, []);
+
+  useEffect(() => {
+    window.electron.invoke('list-character-images').then((result) => {
+      setCharacterImages(result?.images || {});
+    }).catch((error) => {
+      console.error('Failed to load character images:', error);
+      setCharacterImages({});
     });
   }, []);
 
@@ -60,11 +73,12 @@ function App() {
   };
 
   const handleSend = async () => {
-    if (!inputText.trim() || !scene || !activeCharacter) return;
+    if (!inputText.trim() || !scene || !activeCharacter || !protagonist) return;
 
     const userMessage = {
       id: `u-${Date.now()}`,
       sender: 'user',
+      characterId: protagonist.id,
       text: inputText
     };
     appendMessage(scene.id, userMessage);
@@ -74,6 +88,7 @@ function App() {
     try {
       const response = await window.electron.invoke('query-local-llm', {
         character: activeCharacter,
+        protagonist,
         userInput: inputText,
         history: scene.messages,
         modelPath: selectedModelPath
@@ -145,6 +160,18 @@ function App() {
             </button>
           ))}
           <div className="panel-section">
+            <h3>主人公</h3>
+            <select
+              className="protagonist-select"
+              value={selectedProtagonistId}
+              onChange={(e) => setSelectedProtagonistId(e.target.value)}
+            >
+              {characters.map((character) => (
+                <option key={character.id} value={character.id}>
+                  {character.name}
+                </option>
+              ))}
+            </select>
             <h3>キャラクター</h3>
             {characters.map((character) => (
               <button
@@ -181,12 +208,25 @@ function App() {
               const isUser = message.sender === 'user';
               const isSystem = message.sender === 'system';
               const character = characters.find((ch) => ch.id === message.characterId);
+              const displayName = isSystem ? 'System' : isUser ? (character?.name || protagonist?.name || '主人公') : `${character?.name || 'キャラ'}`;
+              const speakerId = message.characterId || protagonist?.id || '';
+              const displayImage = isSystem ? '' : characterImages[speakerId];
+              const fallbackIcon = isSystem ? '⚙' : (character?.icon || displayName.slice(0, 1));
               return (
                 <div key={message.id} className={`chat-message ${isUser ? 'user' : isSystem ? 'system' : 'character'}`}>
-                  <div className="chat-meta">
-                    {isSystem ? 'System' : isUser ? 'You' : `${character?.name || 'キャラ'}`}
+                  <div className="chat-row">
+                    <span className="chat-avatar" aria-hidden="true">
+                      {displayImage ? (
+                        <img src={displayImage} alt="" className="chat-avatar-image" />
+                      ) : fallbackIcon}
+                    </span>
+                    <div className="chat-content">
+                      <div className="chat-meta">
+                        <span>{displayName}</span>
+                      </div>
+                      <div className="chat-body">{message.text}</div>
+                    </div>
                   </div>
-                  <div className="chat-body">{message.text}</div>
                 </div>
               );
             })}

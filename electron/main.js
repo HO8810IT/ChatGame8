@@ -6,11 +6,26 @@ const { queryLocalLLM, startServer, stopServer } = require('./localLLM.js');
 
 const DEV_SERVER_URL = 'http://127.0.0.1:5173';
 const MODELS_DIR = path.join(__dirname, '..', 'models');
+const CHARACTER_IMAGE_DIR = path.join(__dirname, '..', 'character_image');
 
 function ensureModelsDir() {
   if (!fs.existsSync(MODELS_DIR)) {
     fs.mkdirSync(MODELS_DIR, { recursive: true });
   }
+}
+
+function ensureCharacterImageDir() {
+  if (!fs.existsSync(CHARACTER_IMAGE_DIR)) {
+    fs.mkdirSync(CHARACTER_IMAGE_DIR, { recursive: true });
+  }
+}
+
+function getMimeTypeByExt(ext) {
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.gif') return 'image/gif';
+  return '';
 }
 
 function waitForDevServer(url, timeoutMs = 15000) {
@@ -101,5 +116,32 @@ ipcMain.handle('load-model', async (event, modelPath) => {
   } catch (error) {
     console.error('Failed to load model:', error);
     return { success: false, message: `エラー: ${error.message}` };
+  }
+});
+
+ipcMain.handle('list-character-images', async () => {
+  try {
+    ensureCharacterImageDir();
+    const allowedExts = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+    const images = {};
+    const files = fs.readdirSync(CHARACTER_IMAGE_DIR, { withFileTypes: true });
+
+    for (const entry of files) {
+      if (!entry.isFile()) continue;
+      const ext = path.extname(entry.name).toLowerCase();
+      if (!allowedExts.has(ext)) continue;
+
+      const id = path.basename(entry.name, ext);
+      const filePath = path.join(CHARACTER_IMAGE_DIR, entry.name);
+      const base64 = fs.readFileSync(filePath).toString('base64');
+      const mimeType = getMimeTypeByExt(ext);
+      if (!mimeType) continue;
+      images[id] = `data:${mimeType};base64,${base64}`;
+    }
+
+    return { images, imageDirectory: CHARACTER_IMAGE_DIR };
+  } catch (error) {
+    console.error('Failed to list character images:', error);
+    return { images: {}, imageDirectory: CHARACTER_IMAGE_DIR };
   }
 });
