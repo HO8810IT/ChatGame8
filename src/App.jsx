@@ -204,8 +204,19 @@ function App() {
             <h2>{scene?.title}</h2>
             <p>{scene?.description}</p>
           </div>
+          <div className="input-area input-area-top">
+            <textarea
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="メッセージを入力してください"
+              rows={2}
+            />
+            <button onClick={handleSend} disabled={isLoading || !inputText.trim()}>
+              {isLoading ? '送信中...' : '送信'}
+            </button>
+          </div>
           <div className="chat-window">
-            {scene?.messages.map((message) => {
+            {[...(scene?.messages || [])].reverse().map((message) => {
               const isUser = message.sender === 'user';
               const isSystem = message.sender === 'system';
               const character = characters.find((ch) => ch.id === message.characterId);
@@ -218,17 +229,6 @@ function App() {
                 </div>
               );
             })}
-          </div>
-          <div className="input-area">
-            <textarea
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="メッセージを入力してください"
-              rows={3}
-            />
-            <button onClick={handleSend} disabled={isLoading || !inputText.trim()}>
-              {isLoading ? '送信中...' : '送信'}
-            </button>
           </div>
         </main>
 
