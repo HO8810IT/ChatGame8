@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import defaultCharacters from '../characters/defaultCharacters';
 import defaultScenes from '../scenes/defaultScenes';
 
+const AVAILABLE_API_SERVICES = [
+  { id: 'openai', name: 'OpenAI API' },
+  { id: 'huggingface', name: 'Hugging Face Inference API' },
+  { id: 'grok', name: 'Grok (xAI)' }
+];
+
 function App() {
   const [scenes, setScenes] = useState([]);
   const [characters, setCharacters] = useState([]);
@@ -14,6 +20,8 @@ function App() {
   const [modelDirectory, setModelDirectory] = useState('');
   const [modelLoadingMessage, setModelLoadingMessage] = useState('');
   const [characterImages, setCharacterImages] = useState({});
+  const [selectedProvider, setSelectedProvider] = useState('api');
+  const [selectedApiService, setSelectedApiService] = useState(AVAILABLE_API_SERVICES[0].id);
   const [characterIdDraft, setCharacterIdDraft] = useState('');
   const [characterManageMessage, setCharacterManageMessage] = useState('');
   const [characterDraft, setCharacterDraft] = useState({ name: '', role: '', promptTemplate: '' });
@@ -23,6 +31,7 @@ function App() {
     activeCharacterId: '',
     initialSystemMessage: ''
   });
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState([]);
   const [editorState, setEditorState] = useState({
     open: false,
     targetType: '',
@@ -31,9 +40,11 @@ function App() {
     value: ''
   });
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [logMessage, setLogMessage] = useState('');
 
   const scene = scenes.find((item) => item.id === selectedSceneId);
-  const activeCharacter = characters.find((ch) => ch.id === scene?.activeCharacterId);
+  const participants = characters.filter((ch) => selectedParticipantIds.includes(ch.id));
+  const activeCharacter = characters.find((ch) => ch.id === scene?.activeCharacterId) || participants[0];
   const protagonist = characters.find((ch) => ch.id === selectedProtagonistId);
 
   useEffect(() => {
@@ -56,11 +67,184 @@ function App() {
     });
   }, [scene?.id]);
 
+  const toggleParticipantSelection = (characterId) => {
+    setSelectedParticipantIds((prev) =>
+      prev.includes(characterId)
+        ? prev.filter((id) => id !== characterId)
+        : [...prev, characterId]
+    );
+  };
+
+  const addScene = () => {
+    const createdAt = Date.now();
+    const newScene = {
+      id: `scene-${createdAt}`,
+      title: '新しいシーン',
+      description: '',
+      activeCharacterId: characters[0]?.id || '',
+      initialSystemMessage: 'シーン「新しいシーン」が開始されました。',
+      messages: [
+        {
+          id: `m-${createdAt}`,
+          sender: 'system',
+          text: 'シーン「新しいシーン」が開始されました。'
+        }
+      ]
+    };
+    setScenes((prev) => [...prev, newScene]);
+    setSelectedSceneId(newScene.id);
+  };
+
+  const deleteScene = () => {
+    if (!scene) return;
+    if (scenes.length <= 1) return;
+    setScenes((prev) => prev.filter((item) => item.id !== scene.id));
+    const remainingScenes = scenes.filter((item) => item.id !== scene.id);
+    setSelectedSceneId(remainingScenes[0]?.id || '');
+  };
+
+  const parseAssistantResponse = (text, participants) => {
+    const participantNames = participants.map((participant) => participant.name);
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    const parsedMessages = [];
+    let activeSpeaker = null;
+    let currentMessage = null;
+
+    const createSystemMessage = (content) => {
+      const msg = {
+        id: `sys-${Date.now()}-${parsedMessages.length}`,
+        sender: 'system',
+        text: content
+      };
+      parsedMessages.push(msg);
+      return msg;
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const labelMatch = line.match(/^(.+?)[:：]\s*(.*)$/);
+      if (labelMatch) {
+        const label = labelMatch[1].trim();
+        const body = labelMatch[2].trim();
+        const participant = participants.find((p) => p.name === label);
+        if (participant) {
+          if (currentMessage && currentMessage.sender === 'character' && currentMessage.characterId === participant.id) {
+            currentMessage.text += body ? `\n${body}` : '';
+          } else {
+            currentMessage = {
+              id: `c-${Date.now()}-${parsedMessages.length}`,
+              sender: 'character',
+              characterId: participant.id,
+              text: body
+            };
+            parsedMessages.push(currentMessage);
+          }
+          activeSpeaker = participant;
+          continue;
+        }
+        if (label.toLowerCase() === 'system' || label === 'System' || label === '地の文') {
+          currentMessage = createSystemMessage(body);
+          activeSpeaker = null;
+          continue;
+        }
+      }
+      if (activeSpeaker && currentMessage && currentMessage.sender === 'character') {
+        currentMessage.text += `\n${line}`;
+      } else if (parsedMessages.length && parsedMessages[parsedMessages.length - 1].sender === 'system') {
+        parsedMessages[parsedMessages.length - 1].text += `\n${line}`;
+      } else {
+        createSystemMessage(line);
+      }
+    }
+
+    return parsedMessages.length > 0
+      ? parsedMessages
+      : [
+          {
+            id: `sys-${Date.now()}`,
+            sender: 'system',
+            text
+          }
+        ];
+  };
+
+  const saveLog = async () => {
+    if (!scene || !scene.messages || scene.messages.length === 0) {
+      setLogMessage('セーブするメッセージがありません');
+      setTimeout(() => setLogMessage(''), 3000);
+      return;
+    }
+
+    try {
+      const result = await window.electron.invoke('save-log', {
+        sceneTitle: scene.title,
+        messages: scene.messages
+      });
+
+      if (result.success) {
+        setLogMessage(`✅ ログを保存しました: ${result.fileName}`);
+      } else {
+        setLogMessage(`❌ ${result.message}`);
+      }
+      setTimeout(() => setLogMessage(''), 3000);
+    } catch (error) {
+      setLogMessage(`❌ エラー: ${error.message}`);
+      setTimeout(() => setLogMessage(''), 3000);
+    }
+  };
+
+  const loadLog = async () => {
+    try {
+      const result = await window.electron.invoke('list-logs');
+      if (!result.success || result.logs.length === 0) {
+        setLogMessage('保存されたログがありません');
+        setTimeout(() => setLogMessage(''), 3000);
+        return;
+      }
+
+      const latestLog = result.logs[0];
+      const logResult = await window.electron.invoke('load-log', latestLog.name);
+      if (!logResult.success) {
+        setLogMessage(`❌ ${logResult.message}`);
+        setTimeout(() => setLogMessage(''), 3000);
+        return;
+      }
+
+      const logData = logResult.data;
+      setScenes((prev) =>
+        prev.map((item) =>
+          item.id === scene.id
+            ? {
+                ...item,
+                messages: logData.messages,
+                title: logData.sceneTitle || item.title
+              }
+            : item
+        )
+      );
+      setLogMessage(`✅ ログを読込しました: ${latestLog.name}`);
+      setTimeout(() => setLogMessage(''), 3000);
+    } catch (error) {
+      setLogMessage(`❌ エラー: ${error.message}`);
+      setTimeout(() => setLogMessage(''), 3000);
+    }
+  };
+
+  const openLogsViewer = async () => {
+    try {
+      await window.electron.invoke('open-logs-viewer');
+    } catch (error) {
+      console.error('Failed to open logs viewer:', error);
+    }
+  };
+
   useEffect(() => {
     setCharacters(defaultCharacters);
     setScenes(defaultScenes);
     setSelectedSceneId(defaultScenes[0]?.id || '');
     setSelectedProtagonistId(defaultCharacters[0]?.id || '');
+    setSelectedParticipantIds(defaultCharacters.map((character) => character.id));
   }, []);
 
   useEffect(() => {
@@ -78,12 +262,14 @@ function App() {
         setModelDirectory(result.modelDirectory);
         const initialModelPath = result.models[0].path;
         setSelectedModelPath(initialModelPath);
-        handleModelChange(initialModelPath);
+        if (selectedProvider === 'local') {
+          handleModelChange(initialModelPath);
+        }
       }
     }).catch((error) => {
       console.error('Failed to load model files:', error);
     });
-  }, []);
+  }, [selectedProvider]);
 
   useEffect(() => {
     window.electron.invoke('list-character-images').then((result) => {
@@ -118,7 +304,8 @@ function App() {
   };
 
   const handleSend = async () => {
-    if (!inputText.trim() || !scene || !activeCharacter || !protagonist) return;
+    const selectedParticipants = participants.length ? participants : [activeCharacter].filter(Boolean);
+    if (!inputText.trim() || !scene || selectedParticipants.length === 0 || !protagonist) return;
 
     const userMessage = {
       id: `u-${Date.now()}`,
@@ -132,19 +319,17 @@ function App() {
 
     try {
       const response = await window.electron.invoke('query-local-llm', {
-        character: activeCharacter,
+        provider: selectedProvider,
+        apiService: selectedApiService,
+        participants: selectedParticipants,
         protagonist,
         userInput: inputText,
         history: scene.messages,
         modelPath: selectedModelPath
       });
 
-      appendMessage(scene.id, {
-        id: `c-${Date.now()}`,
-        sender: 'character',
-        characterId: activeCharacter.id,
-        text: response.text
-      });
+      const assistantMessages = parseAssistantResponse(response.text, selectedParticipants);
+      assistantMessages.forEach((message) => appendMessage(scene.id, message));
     } catch (error) {
       appendMessage(scene.id, {
         id: `err-${Date.now()}`,
@@ -234,6 +419,7 @@ function App() {
       icon: '🙂'
     };
     setCharacters((prev) => [...prev, newCharacter]);
+    setSelectedParticipantIds((prev) => [...prev, newCharacter.id]);
     if (!scene) {
       setSelectedProtagonistId(newCharacter.id);
       showCharacterManageMessage('キャラクターを追加しました');
@@ -383,12 +569,50 @@ function App() {
               ダークモード
             </label>
           </div>
+          <div className="provider-selector">
+            <label>
+              <input
+                type="radio"
+                name="provider"
+                value="api"
+                checked={selectedProvider === 'api'}
+                onChange={() => setSelectedProvider('api')}
+              />
+              APIモード
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="provider"
+                value="local"
+                checked={selectedProvider === 'local'}
+                onChange={() => setSelectedProvider('local')}
+              />
+              ローカルLLM
+            </label>
+          </div>
+          {selectedProvider === 'api' && (
+            <div className="api-service-selector">
+              <label htmlFor="api-service-select">API サービス:</label>
+              <select
+                id="api-service-select"
+                value={selectedApiService}
+                onChange={(e) => setSelectedApiService(e.target.value)}
+              >
+                {AVAILABLE_API_SERVICES.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <label htmlFor="model-select">モデル選択:</label>
           <select
             id="model-select"
             value={selectedModelPath}
             onChange={(e) => handleModelChange(e.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || selectedProvider !== 'local'}
           >
             {modelFiles.map((model) => (
               <option key={model.path} value={model.path}>
@@ -399,21 +623,20 @@ function App() {
           {modelLoadingMessage && (
             <div className="model-loading-message">{modelLoadingMessage}</div>
           )}
+          <div className="log-controls">
+            <button className="secondary-button" onClick={saveLog}>💾 保存</button>
+            <button className="secondary-button" onClick={loadLog}>📂 開く</button>
+            <button className="secondary-button" onClick={openLogsViewer}>📋 ログビューア</button>
+          </div>
+          {logMessage && (
+            <div className="log-message">{logMessage}</div>
+          )}
         </div>
       </div>
 
       <div className="layout">
         <aside className="panel panel-left">
-          <div className="panel-header">シーン一覧</div>
-          {scenes.map((item) => (
-            <button
-              key={item.id}
-              className={`scene-button ${item.id === selectedSceneId ? 'active' : ''}`}
-              onClick={() => selectScene(item.id)}
-            >
-              {item.title}
-            </button>
-          ))}
+          <div className="panel-header">会話参加キャラクター</div>
           <div className="panel-section">
             <h3>主人公</h3>
             <select
@@ -427,20 +650,22 @@ function App() {
                 </option>
               ))}
             </select>
-            <h3>キャラクター</h3>
+            <h3>参加キャラクター</h3>
+            <div className="participant-checkboxes">
+              {characters.map((character) => (
+                <label key={character.id} className="participant-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedParticipantIds.includes(character.id)}
+                    onChange={() => toggleParticipantSelection(character.id)}
+                  />
+                  {character.name}
+                </label>
+              ))}
+            </div>
             <button className="secondary-button character-manage-button" onClick={addCharacter}>
               + キャラクター追加
             </button>
-            {characters.map((character) => (
-              <button
-                key={character.id}
-                className={`character-button ${character.id === activeCharacter?.id ? 'active' : ''}`}
-                style={{ borderColor: character.color }}
-                onClick={() => changeActiveCharacter(character.id)}
-              >
-                {character.name}
-              </button>
-            ))}
           </div>
         </aside>
 
@@ -495,6 +720,25 @@ function App() {
             })}
           </div>
         </main>
+
+        <aside className="panel panel-scene-list">
+          <div className="panel-header-row">
+            <div className="panel-header">シーン一覧</div>
+            <div className="scene-list-actions">
+              <button className="secondary-button" onClick={addScene}>追加</button>
+              <button className="secondary-button" onClick={deleteScene} disabled={scenes.length <= 1}>削除</button>
+            </div>
+          </div>
+          {scenes.map((item) => (
+            <button
+              key={item.id}
+              className={`scene-button ${item.id === selectedSceneId ? 'active' : ''}`}
+              onClick={() => selectScene(item.id)}
+            >
+              {item.title}
+            </button>
+          ))}
+        </aside>
 
         <aside className="panel panel-right">
           <div className="panel-header-row">

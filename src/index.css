@@ -41,6 +41,29 @@
   align-items: center;
   max-width: 1400px;
   margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+.log-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.log-message {
+  min-width: 200px;
+  padding: 6px 12px;
+  background: #dbeafe;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1e40af;
+}
+
+.dark-mode .log-message {
+  background: #052e16;
+  border: 1px solid #16a34a;
+  color: #bbf7d0;
 }
 
 .model-selector-content label {
@@ -85,6 +108,51 @@
   accent-color: #3b82f6;
 }
 
+.provider-selector {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.provider-selector label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.provider-selector input[type="radio"] {
+  margin: 0;
+  accent-color: #22c55e;
+}
+
+.api-service-selector {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.api-service-selector label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.api-service-selector select {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 0.9rem;
+}
+
+.dark-mode .api-service-selector select {
+  border: 1px solid #334155;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
 .model-loading-message {
   min-width: 180px;
   padding: 6px 12px;
@@ -103,7 +171,7 @@
 
 .layout {
   display: grid;
-  grid-template-columns: 240px minmax(440px, 1fr) 300px 300px;
+  grid-template-columns: 240px minmax(420px, 1fr) 240px 260px 260px;
   gap: 16px;
   padding: 16px;
   flex: 1;
@@ -116,6 +184,10 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   padding: 20px;
   min-height: 0;
+}
+
+.panel-scene-list {
+  overflow-y: auto;
 }
 
 .dark-mode .panel {
@@ -156,6 +228,32 @@
   color: #1f2937;
   padding: 10px 12px;
   margin-bottom: 14px;
+}
+
+.participant-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.participant-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: #1f2937;
+}
+
+.dark-mode .participant-checkbox {
+  color: #e2e8f0;
+}
+
+.scene-list-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .dark-mode .protagonist-select {

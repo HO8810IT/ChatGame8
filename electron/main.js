@@ -1,12 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { exec } = require('child_process');
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { queryLocalLLM, startServer, stopServer } = require('./localLLM.js');
+const { queryLLM, startServer, stopServer } = require('./localLLM.js');
 
 const DEV_SERVER_URL = 'http://127.0.0.1:5173';
 const MODELS_DIR = path.join(__dirname, '..', 'models');
 const CHARACTER_IMAGE_DIR = path.join(__dirname, '..', 'character_image');
+const LOGS_DIR = path.join(__dirname, '..', 'logs');
 
 function ensureModelsDir() {
   if (!fs.existsSync(MODELS_DIR)) {
@@ -17,6 +19,12 @@ function ensureModelsDir() {
 function ensureCharacterImageDir() {
   if (!fs.existsSync(CHARACTER_IMAGE_DIR)) {
     fs.mkdirSync(CHARACTER_IMAGE_DIR, { recursive: true });
+  }
+}
+
+function ensureLogsDir() {
+  if (!fs.existsSync(LOGS_DIR)) {
+    fs.mkdirSync(LOGS_DIR, { recursive: true });
   }
 }
 
@@ -75,7 +83,20 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+function setConsoleUtf8() {
+  if (process.platform === 'win32' && process.stdout.isTTY) {
+    exec('chcp 65001 > nul', (error) => {
+      if (error) {
+        console.error('Failed to set console code page to UTF-8:', error);
+      }
+    });
+  }
+}
+
+app.whenReady().then(() => {
+  setConsoleUtf8();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -90,7 +111,7 @@ app.on('activate', () => {
 });
 
 ipcMain.handle('query-local-llm', async (event, payload) => {
-  return queryLocalLLM(payload);
+  return queryLLM(payload);
 });
 
 ipcMain.handle('list-models', async () => {
@@ -147,3 +168,91 @@ ipcMain.handle('list-character-images', async () => {
     return { images: {}, imageDirectory: CHARACTER_IMAGE_DIR };
   }
 });
+
+ipcMain.handle('save-log', async (event, logData) => {
+  try {
+    ensureLogsDir();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const fileName = `log-${timestamp}.json`;
+    const filePath = path.join(LOGS_DIR, fileName);
+    const jsonData = {
+      savedAt: new Date().toISOString(),
+      sceneTitle: logData.sceneTitle || 'シーン',
+      messages: logData.messages || []
+    };
+    fs.writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf-8');
+    return { success: true, fileName, filePath };
+  } catch (error) {
+    console.error('Failed to save log:', error);
+    return { success: false, message: `ログ保存エラー: ${error.message}` };
+  }
+});
+
+ipcMain.handle('list-logs', async () => {
+  try {
+    ensureLogsDir();
+    const files = fs.readdirSync(LOGS_DIR)
+      .filter((file) => file.startsWith('log-') && file.endsWith('.json'))
+      .map((file) => ({
+        name: file,
+        path: path.join(LOGS_DIR, file),
+        size: fs.statSync(path.join(LOGS_DIR, file)).size
+      }))
+      .sort((a, b) => b.name.localeCompare(a.name));
+    return { success: true, logs: files, logsDir: LOGS_DIR };
+  } catch (error) {
+    console.error('Failed to list logs:', error);
+    return { success: false, logs: [], message: `ログ一覧取得エラー: ${error.message}` };
+  }
+});
+
+ipcMain.handle('load-log', async (event, fileName) => {
+  try {
+    ensureLogsDir();
+    const filePath = path.join(LOGS_DIR, fileName);
+    if (!fs.existsSync(filePath)) {
+      return { success: false, message: 'ファイルが見つかりません' };
+    }
+    const jsonData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return { success: true, data: jsonData };
+  } catch (error) {
+    console.error('Failed to load log:', error);
+    return { success: false, message: `ログ読込エラー: ${error.message}` };
+  }
+});
+
+ipcMain.handle('delete-log', async (event, fileName) => {
+  try {
+    ensureLogsDir();
+    const filePath = path.join(LOGS_DIR, fileName);
+    if (!fs.existsSync(filePath)) {
+      return { success: false, message: 'ファイルが見つかりません' };
+    }
+    fs.unlinkSync(filePath);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete log:', error);
+    return { success: false, message: `ログ削除エラー: ${error.message}` };
+  }
+});
+
+ipcMain.handle('open-logs-viewer', async (event) => {
+  const logsWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    webPreferences: {
+      preload: path.join(__dirname, 'logs-viewer-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  if (app.isPackaged) {
+    logsWindow.loadFile(path.join(__dirname, '../dist/renderer/logs-viewer.html'));
+  } else {
+    logsWindow.loadFile(path.join(__dirname, '../electron/logs-viewer.html'));
+  }
+});
+

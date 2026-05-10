@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>会話ログビューア</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #f9fafb;
+      color: #1f2937;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      height: 100vh;
+      gap: 0;
+    }
+
+    .logs-list {
+      background: #ffffff;
+      border-right: 1px solid #d1d5db;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .logs-list-header {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .refresh-button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .refresh-button:hover {
+      background: #2563eb;
+    }
+
+    .log-item {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .log-item:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+    }
+
+    .log-item.active {
+      background: #dbeafe;
+      border-color: #3b82f6;
+    }
+
+    .log-item-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+
+    .log-item-size {
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .viewer {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .viewer-header {
+      background: #ffffff;
+      border-bottom: 1px solid #d1d5db;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .viewer-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .viewer-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .viewer-button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .viewer-button:hover {
+      background: #2563eb;
+    }
+
+    .viewer-button.danger {
+      background: #ef4444;
+    }
+
+    .viewer-button.danger:hover {
+      background: #dc2626;
+    }
+
+    .viewer-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .message {
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .message.user {
+      background: #dbeafe;
+    }
+
+    .message.character {
+      background: #f3f4f6;
+    }
+
+    .message.system {
+      background: #fef3c7;
+    }
+
+    .message-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #d1d5db;
+      color: white;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .message-content {
+      flex: 1;
+    }
+
+    .message-name {
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 4px;
+    }
+
+    .message-text {
+      color: #374151;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .empty-message {
+      text-align: center;
+      color: #9ca3af;
+      padding: 40px 20px;
+    }
+
+    .metadata {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logs-list">
+      <div class="logs-list-header">
+        ログ一覧
+        <button class="refresh-button" onclick="refreshLogs()">更新</button>
+      </div>
+      <div id="logsList"></div>
+    </div>
+
+    <div class="viewer">
+      <div class="viewer-header">
+        <div class="viewer-title" id="viewerTitle">ログを選択</div>
+        <div class="viewer-actions">
+          <button class="viewer-button" onclick="exportJson()">JSON保存</button>
+          <button class="viewer-button danger" onclick="deleteCurrentLog()">削除</button>
+        </div>
+      </div>
+      <div class="viewer-content" id="viewerContent">
+        <div class="empty-message">ログを選択してください</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="logs-viewer.js"></script>
+</body>
+</html>

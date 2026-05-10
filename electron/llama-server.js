@@ -73,10 +73,13 @@ function startServer(modelPath) {
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
+    serverProcess.stdout.setEncoding('utf8');
+    serverProcess.stderr.setEncoding('utf8');
+
     let stdout = '';
     serverProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-      console.log('[llama-server]', data.toString().trim());
+      stdout += data;
+      console.log('[llama-server]', data.trim());
     });
 
     serverProcess.stderr.on('data', (data) => {
@@ -147,6 +150,9 @@ function queryServer(prompt, generationOptions = {}) {
       stop
     });
 
+    console.log('[LLM REQUEST PAYLOAD]');
+    console.log(payload);
+
     const options = {
       hostname: '127.0.0.1',
       port: currentServerPort || DEFAULT_SERVER_PORT,
@@ -165,8 +171,12 @@ function queryServer(prompt, generationOptions = {}) {
         data += chunk;
       });
       res.on('end', () => {
+        console.log('[LLM RAW RESPONSE BODY]');
+        console.log(data);
         try {
           const response = JSON.parse(data);
+          console.log('[LLM PARSED RESPONSE CONTENT]');
+          console.log(response.content || '');
           resolve(response.content || '');
         } catch (error) {
           console.error('Failed to parse server response:', error);
