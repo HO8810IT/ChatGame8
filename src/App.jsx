@@ -30,6 +30,7 @@ function App() {
     title: '',
     value: ''
   });
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const scene = scenes.find((item) => item.id === selectedSceneId);
   const activeCharacter = characters.find((ch) => ch.id === scene?.activeCharacterId);
@@ -61,6 +62,14 @@ function App() {
     setSelectedSceneId(defaultScenes[0]?.id || '');
     setSelectedProtagonistId(defaultCharacters[0]?.id || '');
   }, []);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     window.electron.invoke('list-models').then((result) => {
@@ -352,6 +361,28 @@ function App() {
     <div className="app-container">
       <div className="model-selector-header">
         <div className="model-selector-content">
+          <div className="theme-selector">
+            <label>
+              <input
+                type="radio"
+                name="theme"
+                value="light"
+                checked={!isDarkMode}
+                onChange={() => setIsDarkMode(false)}
+              />
+              通常モード
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="theme"
+                value="dark"
+                checked={isDarkMode}
+                onChange={() => setIsDarkMode(true)}
+              />
+              ダークモード
+            </label>
+          </div>
           <label htmlFor="model-select">モデル選択:</label>
           <select
             id="model-select"
